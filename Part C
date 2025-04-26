@@ -1,0 +1,124 @@
+#include <LiquidCrystal.h>
+
+// Part C: Dual Motor with LCD Display
+
+#define motor1PWM 5
+#define motor1Dir 4
+#define encoder1A 2
+#define encoder1B 3
+
+#define motor2PWM 6
+#define motor2Dir 7
+#define encoder2A 18
+#define encoder2B 19
+
+// LCD Pins: RS, EN, D4, D5, D6, D7
+LiquidCrystal lcd(8, 9, 10, 11, 12, 13);
+
+volatile long encoderCount1 = 0;
+volatile long encoderCount2 = 0;
+float degreesPerCount = 1.8;
+
+void setup() {
+  pinMode(motor1PWM, OUTPUT);
+  pinMode(motor1Dir, OUTPUT);
+  pinMode(encoder1A, INPUT_PULLUP);
+  pinMode(encoder1B, INPUT_PULLUP);
+  
+  pinMode(motor2PWM, OUTPUT);
+  pinMode(motor2Dir, OUTPUT);
+  pinMode(encoder2A, INPUT_PULLUP);
+  pinMode(encoder2B, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(encoder1A), encoder1ISR, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(encoder2A), encoder2ISR, CHANGE);
+
+  lcd.begin(16,2);
+  lcd.print("System Ready");
+
+  Serial.begin(9600);
+  delay(2000);
+  lcd.clear();
+}
+
+void loop() {
+  long angle1 = encoderCount1 * degreesPerCount;
+  long angle2 = encoderCount2 * degreesPerCount;
+  
+  lcd.setCursor(0, 0);
+  lcd.print("M1:");
+  lcd.print(angle1);
+  lcd.print((char)223); // Degree symbol
+
+  lcd.setCursor(8, 0);
+  lcd.print("M2:");
+  lcd.print(angle2);
+  lcd.print((char)223);
+
+  if (Serial.available()) {
+    int input1 = Serial.parseInt();
+    int input2 = Serial.parseInt();
+    moveMotorsByAngle(input1, input2);
+  }
+
+  delay(500);
+}
+
+void moveMotorsByAngle(int angle1, int angle2) {
+  long currentAngle1 = encoderCount1 * degreesPerCount;
+  long currentAngle2 = encoderCount2 * degreesPerCount;
+
+  long targetAngle1 = currentAngle1 + angle1;
+  long targetAngle2 = currentAngle2 + angle2;
+
+  bool error = false;
+
+  if (targetAngle1 > 180 || targetAngle1 < -180 || targetAngle2 > 180 || targetAngle2 < -180) {
+    lcd.clear();
+    lcd.setCursor(0, 0);
+    lcd.print("ERROR: Limit!");
+    error = true;
+    delay(2000);
+    lcd.clear();
+    return;
+  }
+
+  int dir1 = (angle1 > 0) ? HIGH : LOW;
+  int dir2 = (angle2 > 0) ? HIGH : LOW;
+
+  digitalWrite(motor1Dir, dir1);
+  digitalWrite(motor2Dir, dir2);
+  analogWrite(motor1PWM, 150);
+  analogWrite(motor2PWM, 150);
+
+  while (true) {
+    long updatedAngle1 = encoderCount1 * degreesPerCount;
+    long updatedAngle2 = encoderCount2 * degreesPerCount;
+
+    bool motor1Done = (dir1 == HIGH && updatedAngle1 >= targetAngle1) || (dir1 == LOW && updatedAngle1 <= targetAngle1);
+    bool motor2Done = (dir2 == HIGH && updatedAngle2 >= targetAngle2) || (dir2 == LOW && updatedAngle2 <= targetAngle2);
+
+    if (motor1Done) analogWrite(motor1PWM, 0);
+    if (motor2Done) analogWrite(motor2PWM, 0);
+
+    if (motor1Done && motor2Done) break;
+  }
+}
+
+void encoder1ISR() {
+  int b = digitalRead(encoder1B);
+  if (b == HIGH) {
+    encoderCount1++;
+  } else {
+    encoderCount1--;
+  }
+}
+
+void encoder2ISR() {
+  int b = digitalRead(encoder2B);
+  if (b == HIGH) {
+    encoderCount2++;
+  } else {
+    encoderCount2--;
+  }
+}
