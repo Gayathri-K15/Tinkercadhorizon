@@ -1,0 +1,58 @@
+// Part A: Single DC motor with encoder control
+
+#define motorPWM 5
+#define motorDir 4
+#define encoderA 2
+#define encoderB 3
+
+volatile long encoderCount = 0;
+float degreesPerCount = 1.8; // Adjust based on your encoder resolution
+
+void setup() {
+  pinMode(motorPWM, OUTPUT);
+  pinMode(motorDir, OUTPUT);
+  pinMode(encoderA, INPUT_PULLUP);
+  pinMode(encoderB, INPUT_PULLUP);
+
+  attachInterrupt(digitalPinToInterrupt(encoderA), encoderISR, CHANGE);
+  
+  Serial.begin(9600);
+}
+
+void loop() {
+  if (Serial.available()) {
+    int moveAngle = Serial.parseInt(); // Read the input
+    moveMotorByAngle(moveAngle);
+  }
+}
+
+void moveMotorByAngle(int angle) {
+  long currentAngle = encoderCount * degreesPerCount;
+  long targetAngle = currentAngle + angle;
+
+  if (targetAngle > 180) targetAngle = 180;
+  if (targetAngle < -180) targetAngle = -180;
+
+  int direction = (angle > 0) ? HIGH : LOW;
+  digitalWrite(motorDir, direction);
+  analogWrite(motorPWM, 150); // Set speed
+
+  while (true) {
+    long updatedAngle = encoderCount * degreesPerCount;
+    if ((direction == HIGH && updatedAngle >= targetAngle) || 
+        (direction == LOW && updatedAngle <= targetAngle)) {
+      break;
+    }
+  }
+
+  analogWrite(motorPWM, 0); // Stop motor
+}
+
+void encoderISR() {
+  int b = digitalRead(encoderB);
+  if (b == HIGH) {
+    encoderCount++;
+  } else {
+    encoderCount--;
+  }
+}
